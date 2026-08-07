@@ -1,0 +1,148 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ================================
+   FACTORYOS DESIGN SYSTEM v1.0
+================================ */
+
+:root {
+  --bg: #090b0f;
+  --surface: #11161d;
+  --surface-2: #171d26;
+  --surface-3: #1c2430;
+
+  --border: rgba(255, 255, 255, 0.06);
+
+  --text: #f3f5f7;
+  --muted: #8d98a7;
+
+  --cyan: #47c6ff;
+  --green: #22c55e;
+  --amber: #f59e0b;
+  --red: #ef4444;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  background: var(--bg);
+  font-family:
+    Inter,
+    "Geist",
+    system-ui,
+    sans-serif;
+}
+
+/* ---------- Background ---------- */
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+
+  background-image:
+    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+
+  background-size: 48px 48px;
+
+  opacity: .22;
+
+  pointer-events: none;
+
+  z-index: -3;
+}
+
+body::after {
+  content: "";
+
+  position: fixed;
+
+  inset: 0;
+
+  background:
+    radial-gradient(circle at top right,
+      rgba(71,198,255,.08),
+      transparent 35%),
+
+    radial-gradient(circle at bottom left,
+      rgba(255,255,255,.04),
+      transparent 45%);
+
+  pointer-events: none;
+
+  z-index: -2;
+}
+
+/* ---------- Scrollbar ---------- */
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0d1117;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a3442;
+  border-radius: 100px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3a4758;
+}
+
+/* ---------- Selection ---------- */
+
+::selection {
+  background: rgba(71,198,255,.25);
+}
+
+/* ---------- Cards ---------- */
+
+.factory-card {
+  background: rgba(18,23,31,.82);
+
+  backdrop-filter: blur(12px);
+
+  border: 1px solid var(--border);
+
+  border-radius: 14px;
+
+  transition: .25s;
+}
+
+.factory-card:hover {
+  border-color: rgba(71,198,255,.18);
+
+  transform: translateY(-2px);
+
+  box-shadow:
+      0 12px 30px rgba(0,0,0,.28);
+}
+
+/* ---------- Headings ---------- */
+
+h1,h2,h3,h4 {
+  letter-spacing: -.03em;
+}
+
+/* ---------- Small Labels ---------- */
+
+.label {
+  color: var(--muted);
+
+  text-transform: uppercase;
+
+  font-size: .72rem;
+
+  letter-spacing: .12em;
+}
