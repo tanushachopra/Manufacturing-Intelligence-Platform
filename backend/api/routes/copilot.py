@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from services.telemetry_service import DATA
+from services.ai_service import get_ai_insights
 
 load_dotenv()
 
@@ -22,75 +22,43 @@ class CopilotRequest(BaseModel):
 
 
 # =========================================================
-# FACTORY DATA
+# MACHINE IDS
 # =========================================================
 
-def get_factory_summary():
-    """
-    Returns ONLY the latest reading for each machine.
+MACHINE_IDS = [
+    "CNC-001",
+    "CNC-002",
+    "CNC-003",
+    "CNC-004",
+]
 
-    We deliberately do NOT send the complete historical
-    dataset to Groq because that can exceed the model's
-    token-per-minute limit.
-    """
 
-    try:
-        df = DATA.copy()
+# =========================================================
+# GET LIVE FACTORY DATA
+# =========================================================
 
-        if df.empty:
-            return []
+def get_live_factory_summary():
 
-        # Latest row for every machine
-        if "machine_id" in df.columns:
-            latest = (
-                df
-                .groupby("machine_id", as_index=False)
-                .tail(1)
+    records = []
+
+    for machine_id in MACHINE_IDS:
+
+        try:
+
+            result = get_ai_insights(machine_id)
+
+            if result is not None:
+
+                records.append(result)
+
+        except Exception as e:
+
+            print(
+                f"⚠️ Could not get data for {machine_id}:",
+                e
             )
-        else:
-            latest = df.tail(20)
 
-        # Keep only useful columns that actually exist
-        useful_columns = [
-            "machine_id",
-            "temperature",
-            "vibration",
-            "pressure",
-            "rpm",
-            "power_consumption",
-            "power",
-            "failure",
-            "failure_risk",
-            "maintenance_required",
-            "maintenance",
-            "anomaly",
-            "anomaly_score",
-            "quality_score",
-            "quality",
-            "remaining_useful_life",
-            "rul",
-        ]
-
-        available_columns = [
-            column
-            for column in useful_columns
-            if column in latest.columns
-        ]
-
-        # Always include machine_id
-        if "machine_id" in latest.columns and "machine_id" not in available_columns:
-            available_columns.insert(0, "machine_id")
-
-        if available_columns:
-            latest = latest[available_columns]
-
-        records = latest.to_dict(orient="records")
-
-        return records
-
-    except Exception as e:
-        print("❌ Factory data error:", e)
-        return []
+    return records
 
 
 # =========================================================
@@ -127,6 +95,11 @@ def needs_factory_data(message: str) -> bool:
         "rul",
         "remaining useful life",
         "remaining life",
+        "tool wear",
+        "coolant",
+        "spindle",
+        "motor",
+        "telemetry",
     ]
 
     return any(
@@ -145,39 +118,51 @@ def copilot(request: CopilotRequest):
     message = request.message.strip()
 
     if not message:
+
         raise HTTPException(
             status_code=400,
             detail="Message cannot be empty",
         )
 
-    # -----------------------------------------------------
+
+    # =====================================================
     # API KEY
-    # -----------------------------------------------------
+    # =====================================================
 
     groq_api_key = os.getenv("GROQ_API_KEY")
 
     if not groq_api_key:
+
         raise HTTPException(
             status_code=500,
             detail="GROQ_API_KEY is not configured",
         )
 
+
     print("\n========================================")
     print("🤖 FACTORYOS COPILOT")
     print("Question:", message)
 
-    # -----------------------------------------------------
+
+    # =====================================================
     # FACTORY CONTEXT
-    # -----------------------------------------------------
+    # =====================================================
 
     factory_context = ""
+
     factory_data_used = False
+
 
     if needs_factory_data(message):
 
         print("🏭 Factory question detected")
 
-        factory_data = get_factory_summary()
+        # IMPORTANT:
+        # Get LIVE telemetry + ML predictions.
+        # DO NOT use historical CSV data here.
+
+        factory_data = get_live_factory_summary()
+
 
         if factory_data:
 
@@ -187,136 +172,230 @@ def copilot(request: CopilotRequest):
                 default=str,
             )
 
-            # Hard safety limit.
-            # This prevents accidentally sending a huge
-            # request to Groq.
-            factory_context = factory_context[:25000]
+            # Safety limit
+            factory_context = factory_context[:30000]
 
             factory_data_used = True
 
             print(
-                "📊 Factory records sent:",
+                "📊 Live machine records sent:",
                 len(factory_data)
             )
 
         else:
-            print("⚠️ No factory data available")
+
+            print(
+                "⚠️ No live factory data available"
+            )
+
 
     else:
 
-        print("💬 General question — factory data NOT sent")
+        print(
+            "💬 General question — factory data NOT sent"
+        )
 
-    # -----------------------------------------------------
+
+    # =====================================================
     # SYSTEM PROMPT
-    # -----------------------------------------------------
+    # =====================================================
 
     if factory_data_used:
 
         system_prompt = f"""
 You are FactoryOS Copilot.
 
-You are an AI assistant for a Manufacturing Intelligence
-Platform.
+You are an AI assistant inside a Manufacturing
+Intelligence Platform.
 
-You have access to the latest available machine telemetry.
+You have access to LIVE simulated machine telemetry
+and LIVE machine-learning predictions from the
+FactoryOS Digital Twin.
 
-Use the factory data below when answering questions about
-machines, maintenance, machine health, anomalies, failure
-risk, production, quality, temperature, vibration, pressure,
-RPM, or equipment.
+The data below is the CURRENT state of the machines.
 
-FACTORY TELEMETRY:
+LIVE FACTORY DATA:
 
 {factory_context}
 
-IMPORTANT RULES:
 
-1. Use the provided factory telemetry for factory-related
-   questions.
+=========================================================
+IMPORTANT RULES
+=========================================================
 
-2. Never invent machine readings.
+1. ALWAYS use the LIVE FACTORY DATA when answering
+   questions about machines or factory health.
 
-3. If the requested information is not present in the
-   telemetry, say that the available telemetry does not
-   contain that information.
+2. DO NOT use historical CSV values unless they are
+   explicitly present in the LIVE FACTORY DATA.
 
-4. Mention specific machine IDs when useful.
+3. NEVER mention fields such as "failure", "quality",
+   or "remaining useful life" from the historical
+   dataset unless they are actually present in the
+   LIVE FACTORY DATA.
 
-5. Give concise, practical answers.
+4. The following fields represent LIVE machine
+   telemetry:
 
-6. You are FactoryOS Copilot, not a generic chatbot.
+   temperature
+   vibration
+   spindle_speed
+   power_consumption
+   motor_current
+   tool_wear
+   feed_rate
+   coolant_flow
+   cycle_time
+   humidity
+   ambient_temperature
+   air_pressure
+
+5. The following fields represent LIVE ML predictions:
+
+   predictive_maintenance.failure_prediction
+   predictive_maintenance.failure_probability
+
+   remaining_useful_life.remaining_useful_life
+
+   anomaly_detection.anomaly
+   anomaly_detection.anomaly_score
+
+6. NEVER invent telemetry values.
+
+7. NEVER assume that a machine is failed simply
+   because a historical dataset may contain a
+   "failure" column.
+
+8. Use the LIVE ML prediction to determine failure risk.
+
+9. If failure_prediction is 1, explain that the ML model
+   predicts a high likelihood of failure.
+
+10. If failure_prediction is 0, explain that the ML model
+    currently predicts low failure risk.
+
+11. If anomaly_detection.anomaly is true, mention that
+    an anomaly has been detected.
+
+12. If anomaly_detection.anomaly is false, mention that
+    no anomaly is currently detected.
+
+13. Use remaining useful life when discussing expected
+    machine life.
+
+14. When discussing machine health, consider multiple
+    signals together:
+    temperature, vibration, power consumption,
+    motor current, tool wear, coolant flow,
+    cycle time, failure probability, anomaly status,
+    and remaining useful life.
+
+15. Do not make up "normal ranges" unless those ranges
+    are explicitly available in the supplied data.
+
+16. Keep answers concise and practical.
+
+17. Mention the machine ID.
+
+18. If the user asks about a machine that is not present
+    in the live factory data, clearly say that live data
+    is unavailable for that machine.
+
+19. Do not refer to yourself as a generic chatbot.
+    You are FactoryOS Copilot.
 """
+
 
     else:
 
         system_prompt = """
 You are FactoryOS Copilot.
 
-You are an AI assistant for a Manufacturing Intelligence
-Platform.
+You are an AI assistant for a Manufacturing
+Intelligence Platform.
 
 You can answer general questions and explain concepts
-related to manufacturing, predictive maintenance,
-machine health, anomaly detection, quality prediction,
-and factory operations.
+related to:
 
-For casual messages such as "hi" or "hello", respond
-naturally and briefly.
+- manufacturing
+- predictive maintenance
+- machine health
+- anomaly detection
+- remaining useful life
+- quality prediction
+- factory operations
+- machine learning
 
-Do not claim to know live factory information unless
-factory telemetry has been provided to you.
+For casual messages such as "hi" or "hello",
+respond naturally and briefly.
+
+Do not claim to know live factory information
+unless live factory telemetry has been provided.
 """
 
-    # -----------------------------------------------------
+
+    # =====================================================
     # GROQ PAYLOAD
-    # -----------------------------------------------------
+    # =====================================================
 
     payload = {
+
         "model": "llama-3.3-70b-versatile",
 
         "messages": [
+
             {
                 "role": "system",
                 "content": system_prompt,
             },
+
             {
                 "role": "user",
                 "content": message,
             },
+
         ],
 
-        "temperature": 0.2,
+        "temperature": 0.1,
 
-        # Keep responses small enough for our use case.
         "max_tokens": 500,
     }
 
-    # -----------------------------------------------------
-    # CALL GROQ
-    # -----------------------------------------------------
 
-    print("🚀 Sending request to Groq...")
+    # =====================================================
+    # CALL GROQ
+    # =====================================================
+
+    print("🚀 Sending LIVE data to Groq...")
+
 
     try:
 
         response = requests.post(
+
             "https://api.groq.com/openai/v1/chat/completions",
 
             headers={
-                "Authorization": f"Bearer {groq_api_key}",
-                "Content-Type": "application/json",
+
+                "Authorization":
+                    f"Bearer {groq_api_key}",
+
+                "Content-Type":
+                    "application/json",
+
             },
 
             json=payload,
 
-            # Don't let the UI spin forever.
             timeout=20,
         )
+
 
         print(
             "✅ Groq response:",
             response.status_code
         )
+
 
         if not response.ok:
 
@@ -327,51 +406,88 @@ factory telemetry has been provided to you.
             )
 
             raise HTTPException(
+
                 status_code=500,
-                detail=f"Groq API error: {response.text}",
+
+                detail=
+                    f"Groq API error: {response.text}",
             )
+
 
         result = response.json()
 
+
         answer = (
-            result["choices"][0]["message"]["content"]
+            result
+            ["choices"]
+            [0]
+            ["message"]
+            ["content"]
         )
+
 
         print("✅ Copilot answer generated")
         print("========================================\n")
 
+
         return {
+
             "answer": answer,
+
             "source": "groq",
-            "factory_data_used": factory_data_used,
+
+            "factory_data_used":
+                factory_data_used,
+
         }
+
 
     except requests.exceptions.Timeout:
 
-        print("❌ Groq request timed out")
+        print(
+            "❌ Groq request timed out"
+        )
 
         raise HTTPException(
+
             status_code=504,
+
             detail="Groq request timed out",
         )
 
+
     except requests.exceptions.RequestException as e:
 
-        print("❌ Groq connection error:", e)
-
-        raise HTTPException(
-            status_code=500,
-            detail=f"Groq connection error: {str(e)}",
+        print(
+            "❌ Groq connection error:",
+            e
         )
 
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=
+                f"Groq connection error: {str(e)}",
+        )
+
+
     except HTTPException:
+
         raise
+
 
     except Exception as e:
 
-        print("❌ Copilot error:", e)
+        print(
+            "❌ Copilot error:",
+            e
+        )
 
         raise HTTPException(
+
             status_code=500,
-            detail=f"Copilot error: {str(e)}",
+
+            detail=
+                f"Copilot error: {str(e)}",
         )

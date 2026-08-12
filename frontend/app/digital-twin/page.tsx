@@ -76,12 +76,13 @@ export default function DigitalTwinPage() {
         <div className="grid grid-cols-12 gap-6">
           <div className="col-span-8">
             <FactoryFloor
-              selectedMachine={selectedMachine}
-              onSelectMachine={(machine) => {
-                console.log("Clicked:", machine);
-                setSelectedMachine(machine);
-              }}
-            />
+  selectedMachine={selectedMachine}
+  onSelectMachine={(machine) => {
+    console.log("Clicked:", machine);
+    setSelectedMachine(machine);
+  }}
+  aiData={aiData}
+/>
           </div>
 
           <div className="col-span-4 space-y-6">

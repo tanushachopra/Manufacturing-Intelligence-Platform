@@ -1,8 +1,8 @@
 // frontend/services/api.ts
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://127.0.0.1:8000";
 
 // ============================================================
 // TYPES
@@ -22,7 +22,6 @@ export interface CopilotResponse {
   factory_data_used?: boolean;
 }
 
-
 // ============================================================
 // GENERIC RESPONSE HANDLER
 // ============================================================
@@ -30,11 +29,9 @@ export interface CopilotResponse {
 async function handleResponse<T>(
   response: Response
 ): Promise<T> {
-
   const text = await response.text();
 
   if (!response.ok) {
-
     console.error(
       "Backend error:",
       response.status,
@@ -47,16 +44,19 @@ async function handleResponse<T>(
   }
 
   if (!text) {
-    throw new Error("Backend returned an empty response.");
+    throw new Error(
+      "Backend returned an empty response."
+    );
   }
 
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new Error("Backend returned invalid JSON.");
+    throw new Error(
+      "Backend returned invalid JSON."
+    );
   }
 }
-
 
 // ============================================================
 // AI INSIGHTS — DIGITAL TWIN
@@ -65,14 +65,17 @@ async function handleResponse<T>(
 export async function getAIInsights(
   machineId: string
 ): Promise<AIInsights> {
-
   const response = await fetch(
-    `${API_BASE_URL}/api/ai-insights/${encodeURIComponent(machineId)}`,
+    `${API_BASE_URL}/api/ai-insights/${encodeURIComponent(
+      machineId
+    )}`,
     {
       method: "GET",
+
       headers: {
         Accept: "application/json",
       },
+
       cache: "no-store",
     }
   );
@@ -80,27 +83,28 @@ export async function getAIInsights(
   return handleResponse<AIInsights>(response);
 }
 
-
 // ============================================================
 // FACTORY MACHINES
 // ============================================================
 
-export async function getFactoryMachines() {
-
+export async function getFactoryMachines(): Promise<
+  AIInsights[]
+> {
   const machines = [
     "CNC-001",
     "CNC-002",
-    "Robot Arm",
-    "Inspection",
+    "CNC-003",
+    "CNC-004",
   ];
 
-  return Promise.all(
+  const results = await Promise.all(
     machines.map((machine) =>
       getAIInsights(machine)
     )
   );
-}
 
+  return results;
+}
 
 // ============================================================
 // COPILOT
@@ -109,33 +113,51 @@ export async function getFactoryMachines() {
 export async function askCopilot(
   message: string
 ): Promise<CopilotResponse> {
-
   const cleanMessage = message.trim();
 
   if (!cleanMessage) {
-    throw new Error("Message cannot be empty.");
+    throw new Error(
+      "Message cannot be empty."
+    );
   }
 
-  // IMPORTANT:
-  // This MUST match the backend route that worked in Swagger.
-  const url = `${API_BASE_URL}/api/copilot`;
+  const url =
+    `${API_BASE_URL}/api/copilot`;
 
-  console.log("================================");
-  console.log("🤖 FactoryOS Copilot");
-  console.log("URL:", url);
-  console.log("Question:", cleanMessage);
-  console.log("================================");
+  console.log(
+    "================================"
+  );
+
+  console.log(
+    "🤖 FactoryOS Copilot"
+  );
+
+  console.log(
+    "URL:",
+    url
+  );
+
+  console.log(
+    "Question:",
+    cleanMessage
+  );
+
+  console.log(
+    "================================"
+  );
 
   let response: Response;
 
   try {
-
     response = await fetch(url, {
       method: "POST",
 
       headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
+        "Content-Type":
+          "application/json",
+
+        Accept:
+          "application/json",
       },
 
       body: JSON.stringify({
@@ -144,9 +166,7 @@ export async function askCopilot(
 
       cache: "no-store",
     });
-
   } catch (error) {
-
     console.error(
       "❌ Could not connect to FastAPI:",
       error
@@ -157,8 +177,8 @@ export async function askCopilot(
     );
   }
 
-
-  const text = await response.text();
+  const text =
+    await response.text();
 
   console.log(
     "Copilot status:",
@@ -170,9 +190,7 @@ export async function askCopilot(
     text
   );
 
-
   if (!response.ok) {
-
     console.error(
       "❌ Copilot backend error:",
       response.status,
@@ -184,22 +202,17 @@ export async function askCopilot(
     );
   }
 
-
   if (!text) {
     throw new Error(
       "Copilot returned an empty response."
     );
   }
 
-
   let data: any;
 
   try {
-
     data = JSON.parse(text);
-
   } catch {
-
     console.error(
       "❌ Copilot returned invalid JSON:",
       text
@@ -210,17 +223,7 @@ export async function askCopilot(
     );
   }
 
-
-  // Backend currently returns:
-  //
-  // {
-  //   "answer": "...",
-  //   "source": "groq",
-  //   "factory_data_used": true
-  // }
-
   if (!data.answer) {
-
     console.error(
       "❌ Copilot response has no answer:",
       data
@@ -231,7 +234,6 @@ export async function askCopilot(
     );
   }
 
-
   console.log(
     "✅ Copilot answer received"
   );
@@ -239,9 +241,10 @@ export async function askCopilot(
   return data as CopilotResponse;
 }
 
-
 // ============================================================
 // EXPORT
 // ============================================================
 
-export { API_BASE_URL };
+export {
+  API_BASE_URL,
+};

@@ -1,19 +1,43 @@
 import pandas as pd
 
+from iot.sensor_simulator import sensor_simulator
+
+
+# =========================================================
+# HISTORICAL FACTORY DATA
+# =========================================================
+
 DATA = pd.read_csv(
     "data/raw/manufacturing_dataset.csv"
 )
 
 
-def get_machine_data(machine_id: str):
+# =========================================================
+# LIVE / SIMULATED TELEMETRY
+# =========================================================
 
-    machine = DATA[
-        DATA["machine_id"] == machine_id
-    ]
+def get_machine_data(
+    machine_id: str,
+    scenario: str = "healthy"
+):
 
-    if machine.empty:
-        return None
+    """
+    Return the latest simulated sensor reading
+    for the requested machine.
 
-    latest = machine.iloc[-1]
+    The simulator acts as our current IoT data source.
 
-    return latest.to_dict()
+    Scenarios:
+    - healthy
+    - degrading
+    - critical
+
+    Later, the same function can be connected to
+    real ESP32/sensor data without changing the
+    prediction layer.
+    """
+
+    return sensor_simulator.get_sensor_reading(
+        machine_id,
+        scenario
+    )

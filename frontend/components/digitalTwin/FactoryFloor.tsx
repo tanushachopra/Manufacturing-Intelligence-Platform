@@ -2,14 +2,14 @@
 
 import {
   IconCpu,
-  IconRobot,
-  IconBuildingFactory2,
   IconTemperature,
+  IconActivity,
 } from "@tabler/icons-react";
 
 interface Props {
   selectedMachine: string;
   onSelectMachine: (machine: string) => void;
+  aiData: any;
 }
 
 const machines = [
@@ -58,9 +58,10 @@ const machines = [
 export default function FactoryFloor({
   selectedMachine,
   onSelectMachine,
+  aiData,
 }: Props) {
   return (
-    <div className="relative h-[700px] rounded-3xl border border-cyan-500/20 bg-gradient-to-br from-[#0E141B] to-[#101827] overflow-hidden">
+    <div className="relative h-[700px] overflow-hidden rounded-3xl border border-cyan-500/20 bg-gradient-to-br from-[#0E141B] to-[#101827]">
 
       {/* Grid */}
 
@@ -88,53 +89,108 @@ export default function FactoryFloor({
       {/* Title */}
 
       <div className="absolute left-8 top-8">
-
-        <p className="text-xs tracking-[0.3em] uppercase text-cyan-400">
-
+        <p className="text-xs uppercase tracking-[0.3em] text-cyan-400">
           DIGITAL TWIN
-
         </p>
 
         <h2 className="mt-2 text-3xl font-bold">
-
           Factory Layout
-
         </h2>
 
         <p className="mt-2 text-slate-400">
-
           AI Powered Smart Manufacturing
-
         </p>
-
       </div>
 
-      {machines.map((machine) => {
+      {/* Machines */}
 
+      {machines.map((machine) => {
         const Icon = machine.icon;
 
         const selected =
           machine.id === selectedMachine;
 
-        const healthy =
-          machine.health >= 90;
+        /*
+         * Use live backend telemetry for the selected machine.
+         * Other machines continue displaying their fallback
+         * values until their live data is fetched.
+         */
+
+        const isLiveMachine =
+          aiData?.machine === machine.id;
+
+        const liveTemperature =
+          isLiveMachine &&
+          aiData?.telemetry?.temperature != null
+            ? Number(aiData.telemetry.temperature)
+            : machine.temp;
+
+        const failureProbability =
+          isLiveMachine &&
+          aiData?.predictive_maintenance
+            ?.failure_probability != null
+            ? Number(
+                aiData.predictive_maintenance.failure_probability
+              )
+            : null;
+
+        const anomaly =
+          isLiveMachine
+            ? Boolean(
+                aiData?.anomaly_detection?.anomaly
+              )
+            : false;
+
+        /*
+         * Calculate machine health from the ML result.
+         *
+         * Healthy:
+         *   failure risk < 10 and no anomaly
+         *
+         * Warning:
+         *   failure risk < 50 and no severe anomaly
+         *
+         * Critical:
+         *   high failure probability OR anomaly
+         */
+
+        let health = machine.health;
+
+        if (failureProbability !== null) {
+          health = Math.max(
+            0,
+            Math.round(
+              100 -
+                failureProbability -
+                (anomaly ? 20 : 0)
+            )
+          );
+        }
+
+        const healthy = health >= 90;
 
         const warning =
-          machine.health >= 75 &&
-          machine.health < 90;
+          health >= 75 &&
+          health < 90;
+
+        const status = healthy
+          ? "Healthy"
+          : warning
+          ? "Maintenance Soon"
+          : "Critical";
 
         return (
-
           <button
             key={machine.id}
-            onClick={() => onSelectMachine(machine.id)}
+            onClick={() =>
+              onSelectMachine(machine.id)
+            }
             className="absolute transition-all duration-300 hover:scale-105"
             style={{
               top: machine.top,
               left: machine.left,
             }}
           >
-
             <div
               className={`w-60 rounded-3xl border p-6 backdrop-blur-xl transition-all duration-300 ${
                 selected
@@ -143,6 +199,8 @@ export default function FactoryFloor({
               }`}
             >
 
+              {/* Machine Header */}
+
               <div className="flex items-center justify-between">
 
                 <Icon
@@ -150,23 +208,36 @@ export default function FactoryFloor({
                   size={28}
                 />
 
-                <div
-                  className={`h-3 w-3 rounded-full animate-pulse ${
-                    healthy
-                      ? "bg-green-400"
-                      : warning
-                      ? "bg-yellow-400"
-                      : "bg-red-500"
-                  }`}
-                />
+                <div className="flex items-center gap-2">
+
+                  {isLiveMachine && (
+                    <IconActivity
+                      size={14}
+                      className="animate-pulse text-cyan-400"
+                    />
+                  )}
+
+                  <div
+                    className={`h-3 w-3 animate-pulse rounded-full ${
+                      healthy
+                        ? "bg-green-400"
+                        : warning
+                        ? "bg-yellow-400"
+                        : "bg-red-500"
+                    }`}
+                  />
+
+                </div>
 
               </div>
 
+              {/* Machine Name */}
+
               <h3 className="mt-6 text-2xl font-semibold">
-
                 {machine.name}
-
               </h3>
+
+              {/* Temperature + Health */}
 
               <div className="mt-5 flex justify-between">
 
@@ -174,22 +245,22 @@ export default function FactoryFloor({
 
                   <IconTemperature size={16} />
 
-                  {machine.temp}°C
+                  {liveTemperature.toFixed(1)}°C
 
                 </div>
 
                 <div className="rounded-full bg-cyan-500/20 px-3 py-1 text-sm font-semibold text-cyan-300">
-
-                  {machine.health}%
-
+                  {health}%
                 </div>
 
               </div>
 
+              {/* Health Bar */}
+
               <div className="mt-5 h-2 rounded-full bg-white/10">
 
                 <div
-                  className={`h-2 rounded-full ${
+                  className={`h-2 rounded-full transition-all duration-500 ${
                     healthy
                       ? "bg-green-400"
                       : warning
@@ -197,11 +268,13 @@ export default function FactoryFloor({
                       : "bg-red-500"
                   }`}
                   style={{
-                    width: `${machine.health}%`,
+                    width: `${health}%`,
                   }}
                 />
 
               </div>
+
+              {/* Status */}
 
               <p
                 className={`mt-5 text-center font-semibold ${
@@ -212,19 +285,20 @@ export default function FactoryFloor({
                     : "text-red-400"
                 }`}
               >
-                {healthy
-                  ? "Healthy"
-                  : warning
-                  ? "Maintenance Soon"
-                  : "Critical"}
+                {status}
               </p>
 
+              {/* Live indicator */}
+
+              {isLiveMachine && (
+                <p className="mt-2 text-center text-xs uppercase tracking-widest text-cyan-400">
+                  Live AI Data
+                </p>
+              )}
+
             </div>
-
           </button>
-
         );
-
       })}
     </div>
   );
